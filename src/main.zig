@@ -5,6 +5,11 @@ const debug = std.log.debug;
 
 const ArrayList = std.ArrayList;
 
+const Row = struct {
+    src: []u8,
+    render: []u8,
+};
+
 const Window = struct {
     width: u16,
     height: u16,
@@ -17,22 +22,23 @@ const Editor = struct {
     orig_termios: os.termios = undefined,
     file_path: []const u8,
     window: Window,
-    rows: ArrayList([]const u8),
+    rows: ArrayList(Row),
 
     fn init(allocator: mem.Allocator) !Self {
         var self = Self{
             .allocator = allocator,
             .file_path = undefined,
             .window = .{ .width = 0, .height = 0 },
-            .rows = ArrayList([]const u8).init(allocator),
+            .rows = ArrayList(Row).init(allocator),
         };
         try self.enableRawMode();
         return self;
     }
     fn deinit(self: *Self) void {
         self.disableRawMode() catch unreachable;
-        for (self.rows.items) |row| {
-            self.allocator.free(row);
+        for (self.rows.items) |item| {
+            self.allocator.free(item.src);
+            self.allocator.free(item.render);
         }
         self.rows.deinit();
     }
@@ -44,10 +50,18 @@ const Editor = struct {
         defer file.close();
 
         var file_bytes = try file.reader().readAllAlloc(self.allocator, std.math.maxInt(u32));
+        defer self.allocator.free(file_bytes);
         var it = std.mem.split(u8, file_bytes, "\n");
 
+        var index: u8 = 0;
         while (it.next()) |line| {
-            try self.rows.append(line);
+            var row = Row{
+                .src = try self.allocator.dupe(u8, line),
+                .render = try self.allocator.dupe(u8, line),
+            };
+
+            try self.rows.insert(index, row);
+            index += 1;
         }
         return;
     }
@@ -58,6 +72,7 @@ const Editor = struct {
         const VMIN = 5;
         const VTIME = 6;
 
+        // Copy "original" termios for reset
         self.orig_termios = try os.tcgetattr(os.STDIN_FILENO);
         var termios = self.orig_termios;
 
@@ -100,18 +115,19 @@ const Editor = struct {
         try list.appendSlice("\x1b[H");
 
         for (self.rows.items) |item| {
-            try list.appendSlice(item);
+            try list.appendSlice(item.src);
             try list.appendSlice("\r\n");
         }
-
         _ = try os.write(os.darwin.STDOUT_FILENO, list.items);
+        var in = std.io.getStdIn();
+        try self.getWinSize(in.handle);
+        debug("{any}", .{self.window.width});
     }
 
     fn readKey(self: *Self) !u8 {
-        var seq = try self.allocator.alloc(u8, 3);
+        var seq = try self.allocator.alloc(u8, 1);
         defer self.allocator.free(seq);
         _ = try os.read(os.darwin.STDIN_FILENO, seq);
-
         return seq[0];
     }
 };
