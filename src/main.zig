@@ -5,37 +5,50 @@ const debug = std.log.debug;
 
 const ArrayList = std.ArrayList;
 
+const Window = struct {
+    width: u16,
+    height: u16,
+};
+
 const Editor = struct {
     const Self = @This();
     allocator: mem.Allocator,
     raw_mode: bool = false,
     orig_termios: os.termios = undefined,
     file_path: []const u8,
+    window: Window,
+    rows: ArrayList([]const u8),
 
     fn init(allocator: mem.Allocator) !Self {
-        return Self{
+        var self = Self{
             .allocator = allocator,
             .file_path = undefined,
+            .window = .{ .width = 0, .height = 0 },
+            .rows = ArrayList([]const u8).init(allocator),
         };
+        try self.enableRawMode();
+        return self;
+    }
+    fn deinit(self: *Self) void {
+        self.disableRawMode() catch unreachable;
+        for (self.rows.items) |row| {
+            self.allocator.free(row);
+        }
+        self.rows.deinit();
     }
 
     fn open(self: *Self, file_path: []const u8) !void {
         self.file_path = file_path;
 
-        const file = try std.fs.cwd().createFile(self.file_path, .{
-            .read = true,
-            .truncate = false,
-        });
+        const file = try std.fs.cwd().createFile(self.file_path, .{ .read = true, .truncate = false });
         defer file.close();
 
-        var i: usize = 0;
         var file_bytes = try file.reader().readAllAlloc(self.allocator, std.math.maxInt(u32));
         var it = std.mem.split(u8, file_bytes, "\n");
-        while (it.next()) |line| {
-            debug("{s}", .{line});
-            i += 1;
-        }
 
+        while (it.next()) |line| {
+            try self.rows.append(line);
+        }
         return;
     }
 
@@ -69,42 +82,59 @@ const Editor = struct {
             self.raw_mode = false;
         }
     }
+
+    fn getWinSize(self: *Self, handle: std.os.fd_t) !void {
+        var window_size: std.os.darwin.winsize = undefined;
+        const err = std.os.darwin.ioctl(handle, std.os.darwin.T.IOCGWINSZ, @ptrToInt(&window_size));
+        if (std.os.errno(err) != .SUCCESS) {
+            return error.IoctlError;
+        }
+        self.window = .{ .width = window_size.ws_col, .height = window_size.ws_row };
+    }
+
+    fn draw(self: *Self) !void {
+        var list = ArrayList(u8).init(self.allocator);
+        defer list.deinit();
+
+        try list.appendSlice("\x1b[?25l"); // Hide cursor
+        try list.appendSlice("\x1b[H");
+
+        for (self.rows.items) |item| {
+            try list.appendSlice(item);
+            try list.appendSlice("\r\n");
+        }
+
+        _ = try os.write(os.darwin.STDOUT_FILENO, list.items);
+    }
+
+    fn readKey(self: *Self) !u8 {
+        var seq = try self.allocator.alloc(u8, 3);
+        defer self.allocator.free(seq);
+        _ = try os.read(os.darwin.STDIN_FILENO, seq);
+
+        return seq[0];
+    }
 };
 
 pub fn main() !void {
-    const stdin = std.io.getStdOut().reader();
-    _ = stdin;
-    var buf: [100]u8 = undefined;
-    _ = buf;
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
     var editor = try Editor.init(allocator);
-    try editor.enableRawMode();
-    defer editor.disableRawMode() catch unreachable;
+    defer editor.deinit();
 
     try editor.open("./src/main.zig");
 
-    // while (true) {
-    //     if (try stdin.readUntilDelimiterOrEof(buf[0..], '\n')) |input| {
-    //         switch (input[0]) {
-    //             'q' => {
-    //                 debug("quitting..", .{});
-    //                 break;
-    //             },
-    //             else => debug("{s}", .{input}),
-    //         }
-    //     } else {
-    //         break;
-    //     }
-    // }
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+    while (true) {
+        try editor.draw();
+        const key = try editor.readKey();
+        switch (key) {
+            'q' => {
+                debug("quitting..", .{});
+                break;
+            },
+            else => debug("{any}", .{key}),
+        }
+    }
 }
