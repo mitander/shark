@@ -5,6 +5,20 @@ const debug = std.log.debug;
 
 const ArrayList = std.ArrayList;
 
+// VT100 escape codes
+const ESC = "\x1B";
+const CSI = ESC ++ "[";
+const STYLE_RESET = CSI ++ "0m";
+const STYLE_BOLD = CSI ++ "1m";
+const STYLE_DIM = CSI ++ "2m";
+const STYLE_ITALIC = CSI ++ "3m";
+const STYLE_UNDERLINE = CSI ++ "4m";
+const STYLE_REVERSE = CSI ++ "7m";
+const STYLE_STRIKETHROUGH = CSI ++ "9m";
+const CLEAR_ALL = CSI ++ "2J";
+const CURSOR_HIDE = CSI ++ "?25l";
+const CURSOR_SHOW = CSI ++ "?25h";
+
 const Row = struct {
     src: []u8,
     render: []u8,
@@ -19,20 +33,70 @@ const Terminal = struct {
     rows: u16,
     in: std.fs.File,
     out: std.fs.File,
+    ansi_escape_codes: bool,
 
     fn init(allocator: std.mem.Allocator) !Self {
+        const VMIN = 5;
+        const VTIME = 6;
+
+        // copy "original" termios for reset
+        var orig_termios = try os.tcgetattr(os.STDIN_FILENO);
+        var termios = orig_termios;
+
+        var out = std.io.getStdOut();
+
+        // TODO: make this work for all platforms
+        termios.cc[VMIN] = 0;
+        termios.cc[VTIME] = 1;
+
+        // input modes:   no break, no CR to NL, no parity check, no strip char, no start/stop output ctrl.
+        // output modes:  disable post processing
+        // control modes: set 8 bit chars
+        // local modes:   choign off, canonical off, no extended functions, no signal chars (^Z, ^C)
+        termios.iflag &= ~(os.darwin.BRKINT | os.darwin.ICRNL | os.darwin.INPCK | os.darwin.ISTRIP | os.darwin.IXON);
+        termios.oflag &= ~(os.darwin.OPOST);
+        termios.cflag |= os.darwin.CS8;
+        termios.lflag &= ~(os.darwin.ECHO | os.darwin.ICANON | os.darwin.IEXTEN | os.darwin.ISIG);
+        _ = os.darwin.tcsetattr(out.handle, .FLUSH, &termios);
+
         return .{
-            .orig_termios = try os.tcgetattr(os.STDIN_FILENO),
+            .orig_termios = orig_termios,
             .raw_mode = false,
             .allocator = allocator,
             .rows = 0,
             .cols = 0,
             .in = std.io.getStdIn(),
-            .out = std.io.getStdOut(),
+            .out = out,
+            .ansi_escape_codes = out.supportsAnsiEscapeCodes(),
         };
     }
 
-    fn update(self: *Self) !void {
+    fn deinit(self: *Self) !void {
+        _ = try os.write(self.out.handle, CURSOR_SHOW); // restore cursor
+        _ = os.darwin.tcsetattr(self.in.handle, .FLUSH, &self.orig_termios); // restore terminal
+    }
+
+    fn render(self: *Self, rows: []Row) !void {
+        var list = ArrayList(u8).init(self.allocator);
+        defer list.deinit();
+
+        try self.updateWindowSize();
+        try list.appendSlice(CLEAR_ALL);
+        try list.appendSlice(CURSOR_HIDE);
+        try list.appendSlice("\x1b[H"); // TODO: what dis do?
+
+        var index: u16 = 0;
+        for (rows) |item| {
+            if (index > self.cols) {
+                try list.appendSlice(item.src);
+                try list.appendSlice("\r\n");
+                index += 1;
+            }
+        }
+        _ = try os.write(self.out.handle, list.items);
+    }
+
+    fn updateWindowSize(self: *Self) !void {
         var winsize: std.os.darwin.winsize = undefined;
         const err = std.os.darwin.ioctl(self.in.handle, std.os.darwin.T.IOCGWINSZ, @ptrToInt(&winsize));
         if (std.os.errno(err) != .SUCCESS) {
@@ -40,38 +104,6 @@ const Terminal = struct {
         }
         self.cols = winsize.ws_col;
         self.rows = winsize.ws_row;
-    }
-
-    fn enableRawMode(self: *Self) !void {
-        if (self.raw_mode) return;
-
-        const VMIN = 5;
-        const VTIME = 6;
-
-        // Copy "original" termios for reset
-        var termios = self.orig_termios;
-
-        // input modes: no break, no CR to NL, no parity check, no strip char, no start/stop output ctrl.
-        // output modes: disable post processing
-        // control modes: set 8 bit chars
-        // local modes: choign off, canonical off, no extended functions, no signal chars (^Z, ^C)
-        termios.iflag &= ~(os.darwin.BRKINT | os.darwin.ICRNL | os.darwin.INPCK | os.darwin.ISTRIP | os.darwin.IXON);
-        termios.oflag &= ~(os.darwin.OPOST);
-        termios.cflag |= os.darwin.CS8;
-        termios.lflag &= ~(os.darwin.ECHO | os.darwin.ICANON | os.darwin.IEXTEN | os.darwin.ISIG);
-
-        termios.cc[VMIN] = 0;
-        termios.cc[VTIME] = 1;
-
-        _ = os.darwin.tcsetattr(os.darwin.STDIN_FILENO, .FLUSH, &termios);
-        self.raw_mode = true;
-    }
-
-    fn disableRawMode(self: *Self) void {
-        if (self.raw_mode) {
-            _ = os.darwin.tcsetattr(os.darwin.STDIN_FILENO, .FLUSH, &self.orig_termios);
-            self.raw_mode = false;
-        }
     }
 };
 
@@ -83,14 +115,11 @@ const Editor = struct {
     terminal: Terminal,
 
     fn init(allocator: mem.Allocator) !Self {
-        var term = try Terminal.init(allocator);
-        try term.enableRawMode();
-
         return .{
             .allocator = allocator,
             .file_path = undefined,
             .rows = ArrayList(Row).init(allocator),
-            .terminal = term,
+            .terminal = try Terminal.init(allocator),
         };
     }
 
@@ -101,8 +130,7 @@ const Editor = struct {
         }
         self.rows.deinit();
 
-        _ = try os.write(os.darwin.STDOUT_FILENO, "\x1b[?25h"); // Restore cursor
-        self.terminal.disableRawMode();
+        try self.terminal.deinit();
     }
 
     fn open(self: *Self, file_path: []const u8) !void {
@@ -129,24 +157,15 @@ const Editor = struct {
         var seq = try self.allocator.alloc(u8, 1);
         defer self.allocator.free(seq);
         _ = try os.read(os.darwin.STDIN_FILENO, seq);
+        try self.rows.append(.{
+            .src = try self.allocator.dupe(u8, seq),
+            .render = try self.allocator.dupe(u8, seq),
+        });
         return seq[0];
     }
 
-    fn render(self: *Self) !void {
-        var list = ArrayList(u8).init(self.allocator);
-        defer list.deinit();
-
-        try self.terminal.update();
-
-        // hide cursor
-        try list.appendSlice("\x1b[?25l");
-        try list.appendSlice("\x1b[H");
-
-        for (self.rows.items) |item| {
-            try list.appendSlice(item.src);
-            try list.appendSlice("\r\n");
-        }
-        _ = try os.write(os.darwin.STDOUT_FILENO, list.items);
+    fn refresh(self: *Self) !void {
+        try self.terminal.render(self.rows.items);
     }
 };
 
@@ -169,7 +188,7 @@ pub fn main() !void {
     try editor.open(file_path);
 
     while (true) {
-        try editor.render();
+        try editor.refresh();
         const key = try editor.readKey();
         switch (key) {
             'q' => {
