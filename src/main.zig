@@ -151,6 +151,14 @@ const Editor = struct {
 };
 
 pub fn main() !void {
+    var args = std.process.args();
+    _ = args.next(); // ignore binary name
+
+    var file_path = args.next() orelse {
+        std.debug.print("Usage: shark [filename]\n", .{});
+        return error.NoFileName;
+    };
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var allocator = gpa.allocator();
     defer _ = gpa.deinit();
@@ -158,7 +166,7 @@ pub fn main() !void {
     var editor = try Editor.init(allocator);
     defer editor.deinit() catch unreachable;
 
-    try editor.open("./src/main.zig");
+    try editor.open(file_path);
 
     while (true) {
         try editor.render();
