@@ -29,6 +29,7 @@ const Terminal = struct {
     orig_termios: os.termios = undefined,
     raw_mode: bool = false,
     allocator: std.mem.Allocator,
+    offset: u16,
     cols: u16,
     rows: u16,
     in: std.fs.File,
@@ -63,6 +64,7 @@ const Terminal = struct {
             .orig_termios = orig_termios,
             .raw_mode = false,
             .allocator = allocator,
+            .offset = 0,
             .rows = 0,
             .cols = 0,
             .in = std.io.getStdIn(),
@@ -85,13 +87,9 @@ const Terminal = struct {
         try list.appendSlice(CURSOR_HIDE);
         try list.appendSlice("\x1b[H"); // TODO: what dis do?
 
-        var index: u16 = 0;
-        for (rows) |item| {
-            if (index > self.cols) {
-                try list.appendSlice(item.src);
-                try list.appendSlice("\r\n");
-                index += 1;
-            }
+        for (rows[self.offset .. self.offset + self.rows]) |item| {
+            try list.appendSlice(item.src);
+            try list.appendSlice("\r\n");
         }
         _ = try os.write(self.out.handle, list.items);
     }
@@ -103,7 +101,7 @@ const Terminal = struct {
             return error.IoctlError;
         }
         self.cols = winsize.ws_col;
-        self.rows = winsize.ws_row;
+        self.rows = winsize.ws_row - 1; // TODO: why is this required to render first row?
     }
 };
 
@@ -157,10 +155,6 @@ const Editor = struct {
         var seq = try self.allocator.alloc(u8, 1);
         defer self.allocator.free(seq);
         _ = try os.read(os.darwin.STDIN_FILENO, seq);
-        try self.rows.append(.{
-            .src = try self.allocator.dupe(u8, seq),
-            .render = try self.allocator.dupe(u8, seq),
-        });
         return seq[0];
     }
 
@@ -194,6 +188,12 @@ pub fn main() !void {
             'q' => {
                 debug("quitting..", .{});
                 break;
+            },
+            'j' => {
+                if (editor.terminal.offset < editor.rows.items.len - editor.terminal.rows) editor.terminal.offset += 1;
+            },
+            'k' => {
+                if (editor.terminal.offset > 0) editor.terminal.offset -= 1;
             },
             else => debug("{any}", .{key}),
         }
