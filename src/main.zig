@@ -19,6 +19,13 @@ const CLEAR_ALL = CSI ++ "2J";
 const CURSOR_HIDE = CSI ++ "?25l";
 const CURSOR_SHOW = CSI ++ "?25h";
 
+const Direction = enum(u8) { Up, Down, Left, Right };
+
+const Cursor = struct {
+    x: u8,
+    y: u8,
+};
+
 const Row = struct {
     src: []u8,
     render: []u8,
@@ -31,6 +38,7 @@ const Terminal = struct {
     allocator: std.mem.Allocator,
     offset: u16,
     cols: u16,
+    cursor: Cursor,
     rows: u16,
     in: std.fs.File,
     out: std.fs.File,
@@ -67,6 +75,7 @@ const Terminal = struct {
             .offset = 0,
             .rows = 0,
             .cols = 0,
+            .cursor = .{ .x = 0, .y = 0 },
             .in = std.io.getStdIn(),
             .out = out,
             .ansi_escape_codes = out.supportsAnsiEscapeCodes(),
@@ -91,6 +100,12 @@ const Terminal = struct {
             try list.appendSlice(item.src);
             try list.appendSlice("\r\n");
         }
+
+        // draw cursor
+        var buf: [32]u8 = undefined;
+        try list.appendSlice(try std.fmt.bufPrint(&buf, "\x1b[{d};{d}H", .{ self.cursor.y, self.cursor.x }));
+        try list.appendSlice("\x1b[?25h");
+
         _ = try os.write(self.out.handle, list.items);
     }
 
@@ -102,6 +117,31 @@ const Terminal = struct {
         }
         self.cols = winsize.ws_col;
         self.rows = winsize.ws_row - 1; // TODO: why is this required to render first row?
+    }
+
+    fn moveCursor(self: *Self, dir: Direction) void {
+        switch (dir) {
+            .Left => {
+                if (self.cursor.x > 0) {
+                    self.cursor.x -= 1;
+                }
+            },
+            .Right => {
+                if (self.cursor.x < self.cols) {
+                    self.cursor.x += 1;
+                }
+            },
+            .Up => {
+                if (self.cursor.y > 0) {
+                    self.cursor.y -= 1;
+                } else if (self.offset > 0) self.offset -= 1;
+            },
+            .Down => {
+                if (self.cursor.y < self.rows) {
+                    self.cursor.y += 1;
+                } else if (self.offset < self.rows) self.offset += 1;
+            },
+        }
     }
 };
 
@@ -189,12 +229,10 @@ pub fn main() !void {
                 debug("quitting..", .{});
                 break;
             },
-            'j' => {
-                if (editor.terminal.offset < editor.rows.items.len - editor.terminal.rows) editor.terminal.offset += 1;
-            },
-            'k' => {
-                if (editor.terminal.offset > 0) editor.terminal.offset -= 1;
-            },
+            'j' => editor.terminal.moveCursor(Direction.Down),
+            'k' => editor.terminal.moveCursor(Direction.Up),
+            'h' => editor.terminal.moveCursor(Direction.Left),
+            'l' => editor.terminal.moveCursor(Direction.Right),
             else => debug("{any}", .{key}),
         }
     }
