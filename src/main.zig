@@ -72,6 +72,14 @@ pub fn main() !void {
             'k' => editor.buffer.moveCursor(Direction.Up),
             'h' => editor.buffer.moveCursor(Direction.Left),
             'l' => editor.buffer.moveCursor(Direction.Right),
+            'i' => while (true) {
+                var key: u8 = try editor.readKey();
+                if (key == 'q') {
+                    break;
+                }
+                try editor.buffer.insert(key);
+                try editor.refresh();
+            },
             else => continue,
         }
     }

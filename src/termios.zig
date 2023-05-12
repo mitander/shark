@@ -75,13 +75,13 @@ pub const Termios = struct {
         try list.appendSlice("\x1b[H");
 
         for (buffer.rows.items[buffer.offset .. buffer.offset + buffer.ws_row]) |item| {
-            try list.appendSlice(item.src);
+            try list.appendSlice(item.render);
             try list.appendSlice("\r\n");
         }
 
         // draw cursor
         var buf: [32]u8 = undefined;
-        try list.appendSlice(try fmt.bufPrint(&buf, "\x1b[{d};{d}H", .{ buffer.cursor_y, buffer.cursor_x }));
+        try list.appendSlice(try fmt.bufPrint(&buf, "\x1b[{d};{d}H", .{ buffer.cursor_y + 1, buffer.cursor_x + 1 }));
         try list.appendSlice("\x1b[?25h");
 
         _ = try os.write(os.STDOUT_FILENO, list.items);

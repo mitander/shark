@@ -71,6 +71,32 @@ pub const Buffer = struct {
         }
     }
 
+    pub fn insert(self: *Self, char: u8) !void {
+        var row = self.rows.items[self.cursor_y];
+        var copy = try self.allocator.dupe(u8, row.render);
+        var buf = try self.allocator.realloc(row.render, row.render.len + 1);
+        defer self.allocator.free(buf);
+        defer self.allocator.free(copy);
+
+        if (self.cursor_x > buf.len) {
+            mem.set(u8, buf[self.cursor_x .. self.cursor_x + 1], char);
+        } else {
+            var j: usize = 0;
+            for (0..buf.len) |i| {
+                if (i == self.cursor_x) {
+                    buf[i] = char;
+                } else {
+                    buf[i] = copy[j];
+                    j += 1;
+                }
+            }
+        }
+        // self.rows.items[y].render = list.items;
+        self.cursor_x += 1;
+
+        self.rows.items[self.cursor_y].render = try self.allocator.dupe(u8, buf);
+    }
+
     pub fn moveCursor(self: *Self, dir: Direction) void {
         switch (dir) {
             .Left => {
