@@ -4,8 +4,9 @@ const mem = std.mem;
 const debug = std.log.debug;
 
 const Terminal = @import("terminal.zig").Terminal;
-const Direction = @import("terminal.zig").Direction;
-const Buffer = @import("terminal.zig").Buffer;
+const Buffer = @import("buffer.zig").Buffer;
+
+pub const Direction = enum(u8) { Up, Down, Left, Right };
 
 const Editor = struct {
     const Self = @This();
@@ -65,8 +66,7 @@ pub fn main() !void {
         try editor.refresh();
         switch (try editor.readKey()) {
             'q' => {
-                debug("quitting..", .{});
-                break;
+                os.exit(0);
             },
             'j' => editor.buffer.moveCursor(Direction.Down),
             'k' => editor.buffer.moveCursor(Direction.Up),

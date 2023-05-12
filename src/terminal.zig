@@ -2,8 +2,12 @@ const std = @import("std");
 const os = std.os;
 const mem = std.mem;
 const debug = std.log.debug;
+const fs = std.fs;
+const io = std.io;
+const fmt = std.fmt;
 
 const ArrayList = std.ArrayList;
+const Buffer = @import("buffer.zig").Buffer;
 
 // VT100 escape codes
 const ESC = "\x1B";
@@ -19,130 +23,24 @@ const CLEAR_ALL = CSI ++ "2J";
 const CURSOR_HIDE = CSI ++ "?25l";
 const CURSOR_SHOW = CSI ++ "?25h";
 
-pub const Direction = enum(u8) { Up, Down, Left, Right };
-
-pub const Cursor = struct {
-    x: u8,
-    y: u8,
-};
-
-const Row = struct {
-    src: []u8,
-    render: []u8,
-};
-
-pub const Buffer = struct {
-    const Self = @This();
-    allocator: mem.Allocator,
-    rows: ArrayList(Row),
-    offset: u16,
-    ws_row: u16,
-    ws_col: u16,
-    cursor_y: u16,
-    cursor_x: u16,
-    file_path: []const u8,
-
-    pub fn init(allocator: mem.Allocator) Self {
-        return .{
-            .allocator = allocator,
-            .rows = ArrayList(Row).init(allocator),
-            .offset = 0,
-            .ws_col = 0,
-            .ws_row = 0,
-            .cursor_y = 0,
-            .cursor_x = 0,
-            .file_path = undefined,
-        };
-    }
-
-    pub fn deinit(self: *Self) void {
-        for (self.rows.items) |item| {
-            self.allocator.free(item.src);
-            self.allocator.free(item.render);
-        }
-        self.rows.deinit();
-    }
-
-    pub fn insertRow(self: *Self, index: usize, item: []const u8) !void {
-        try self.rows.insert(index, .{
-            .src = try self.allocator.dupe(u8, item),
-            .render = try self.allocator.dupe(u8, item),
-        });
-    }
-
-    pub fn openFile(self: *Self, file_path: []const u8) !void {
-        const file = try std.fs.cwd().createFile(file_path, .{ .read = true, .truncate = false });
-        defer file.close();
-
-        var file_bytes = try file.reader().readAllAlloc(self.allocator, std.math.maxInt(u32));
-        defer self.allocator.free(file_bytes);
-
-        var it = std.mem.split(u8, file_bytes, "\n");
-        var index: usize = 0;
-        while (it.next()) |line| {
-            try self.insertRow(index, line);
-            index += 1;
-        }
-    }
-
-    pub fn moveCursor(self: *Self, dir: Direction) void {
-        switch (dir) {
-            .Left => {
-                if (self.cursor_x > 0) {
-                    self.cursor_x -= 1;
-                }
-            },
-            .Right => {
-                if (self.cursor_x < self.ws_col) {
-                    self.cursor_x += 1;
-                }
-            },
-            .Up => {
-                if (self.cursor_y > 0) {
-                    self.cursor_y -= 1;
-                } else if (self.offset > 0) {
-                    self.offset -= 1;
-                }
-            },
-            .Down => {
-                if (self.cursor_y < self.ws_row) {
-                    self.cursor_y += 1;
-                } else if (self.offset < self.rows.items.len - self.ws_row) {
-                    self.offset += 1;
-                }
-            },
-        }
-    }
-
-    pub fn updateWindowSize(self: *Self) !void {
-        var winsize: std.os.darwin.winsize = undefined;
-        const err = std.os.darwin.ioctl(os.STDOUT_FILENO, std.os.darwin.T.IOCGWINSZ, @ptrToInt(&winsize));
-        if (std.os.errno(err) != .SUCCESS) {
-            return error.IoctlError;
-        }
-        self.ws_col = winsize.ws_col;
-        self.ws_row = winsize.ws_row - 1; // TODO : why is this required to render first row?
-    }
-};
-
 pub const Terminal = struct {
     const Self = @This();
     orig_termios: os.termios = undefined,
     raw_mode: bool = false,
-    allocator: std.mem.Allocator,
-    in: std.fs.File,
-    out: std.fs.File,
+    allocator: mem.Allocator,
+    in: fs.File,
+    out: fs.File,
     ansi_escape_codes: bool,
 
-    pub fn init(allocator: std.mem.Allocator) !Self {
+    pub fn init(allocator: mem.Allocator) !Self {
         const VMIN = 5;
         const VTIME = 6;
 
-        // copy "original" termios for reset
+        // copy "original" termios for restore
         var orig_termios = try os.tcgetattr(os.STDIN_FILENO);
         var termios = orig_termios;
 
-        var out = std.io.getStdOut();
+        var out = io.getStdOut();
 
         // TODO: make this work for all platforms
         termios.cc[VMIN] = 0;
@@ -162,7 +60,7 @@ pub const Terminal = struct {
             .orig_termios = orig_termios,
             .raw_mode = false,
             .allocator = allocator,
-            .in = std.io.getStdIn(),
+            .in = io.getStdIn(),
             .out = out,
             .ansi_escape_codes = out.supportsAnsiEscapeCodes(),
         };
@@ -188,7 +86,7 @@ pub const Terminal = struct {
 
         // draw cursor
         var buf: [32]u8 = undefined;
-        try list.appendSlice(try std.fmt.bufPrint(&buf, "\x1b[{d};{d}H", .{ buffer.cursor_y, buffer.cursor_x }));
+        try list.appendSlice(try fmt.bufPrint(&buf, "\x1b[{d};{d}H", .{ buffer.cursor_y, buffer.cursor_x }));
         try list.appendSlice("\x1b[?25h");
 
         _ = try os.write(self.out.handle, list.items);
