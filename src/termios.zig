@@ -5,6 +5,7 @@ const debug = std.log.debug;
 const fs = std.fs;
 const io = std.io;
 const fmt = std.fmt;
+const assert = std.debug.assert;
 
 const ArrayList = std.ArrayList;
 const Buffer = @import("buffer.zig").Buffer;
@@ -74,7 +75,11 @@ pub const Termios = struct {
         try list.appendSlice(CURSOR_HIDE);
         try list.appendSlice("\x1b[H");
 
-        for (buffer.rows.items[buffer.offset .. buffer.offset + buffer.ws_row]) |item| {
+        var end: usize = if (buffer.offset + buffer.ws_row > buffer.rows.items.len) buffer.rows.items.len else buffer.offset + buffer.ws_row;
+        assert(buffer.rows.items.len > 0);
+        assert(end <= buffer.rows.items.len);
+
+        for (buffer.rows.items[buffer.offset..end]) |item| {
             try list.appendSlice(item.render);
             try list.appendSlice("\r\n");
         }

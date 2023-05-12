@@ -3,8 +3,9 @@ const os = std.os;
 const mem = std.mem;
 const fs = std.fs;
 const math = std.math;
+const assert = std.debug.assert;
 
-const Direction = @import("main.zig").Direction;
+const Direction = @import("editor.zig").Direction;
 const ArrayList = std.ArrayList;
 
 pub const Cursor = struct {
@@ -78,52 +79,27 @@ pub const Buffer = struct {
         defer self.allocator.free(buf);
         defer self.allocator.free(copy);
 
+        assert(buf.len > 0);
         if (self.cursor_x > buf.len) {
+            assert(self.cursor_x + 1 <= buf.len);
             mem.set(u8, buf[self.cursor_x .. self.cursor_x + 1], char);
         } else {
             var j: usize = 0;
             for (0..buf.len) |i| {
                 if (i == self.cursor_x) {
+                    assert(i < buf.len);
                     buf[i] = char;
                 } else {
+                    assert(i < buf.len);
+                    assert(j < copy.len);
                     buf[i] = copy[j];
                     j += 1;
                 }
             }
         }
-        // self.rows.items[y].render = list.items;
         self.cursor_x += 1;
-
+        assert(self.cursor_y < self.rows.items.len);
         self.rows.items[self.cursor_y].render = try self.allocator.dupe(u8, buf);
-    }
-
-    pub fn moveCursor(self: *Self, dir: Direction) void {
-        switch (dir) {
-            .Left => {
-                if (self.cursor_x > 0) {
-                    self.cursor_x -= 1;
-                }
-            },
-            .Right => {
-                if (self.cursor_x < self.ws_col) {
-                    self.cursor_x += 1;
-                }
-            },
-            .Up => {
-                if (self.cursor_y > 0) {
-                    self.cursor_y -= 1;
-                } else if (self.offset > 0) {
-                    self.offset -= 1;
-                }
-            },
-            .Down => {
-                if (self.cursor_y < self.ws_row) {
-                    self.cursor_y += 1;
-                } else if (self.offset < self.rows.items.len - self.ws_row) {
-                    self.offset += 1;
-                }
-            },
-        }
     }
 
     pub fn updateWindowSize(self: *Self) !void {
@@ -133,6 +109,6 @@ pub const Buffer = struct {
             return error.IoctlError;
         }
         self.ws_col = winsize.ws_col;
-        self.ws_row = winsize.ws_row - 1; // TODO : why is this required to render first row?
+        self.ws_row = winsize.ws_row;
     }
 };
