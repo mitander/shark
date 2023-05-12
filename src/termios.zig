@@ -23,13 +23,11 @@ const CLEAR_ALL = CSI ++ "2J";
 const CURSOR_HIDE = CSI ++ "?25l";
 const CURSOR_SHOW = CSI ++ "?25h";
 
-pub const Terminal = struct {
+pub const Termios = struct {
     const Self = @This();
     orig_termios: os.termios = undefined,
     raw_mode: bool = false,
     allocator: mem.Allocator,
-    in: fs.File,
-    out: fs.File,
     ansi_escape_codes: bool,
 
     pub fn init(allocator: mem.Allocator) !Self {
@@ -40,35 +38,32 @@ pub const Terminal = struct {
         var orig_termios = try os.tcgetattr(os.STDIN_FILENO);
         var termios = orig_termios;
 
-        var out = io.getStdOut();
-
-        // TODO: make this work for all platforms
+        // non-blocking polling
         termios.cc[VMIN] = 0;
+        // tenths of a second elapses between bytes
         termios.cc[VTIME] = 1;
 
-        // input modes:   no break, no CR to NL, no parity check, no strip char, no start/stop output ctrl.
-        // output modes:  disable post processing
-        // control modes: set 8 bit chars
-        // local modes:   choign off, canonical off, no extended functions, no signal chars (^Z, ^C)
-        termios.iflag &= ~(os.darwin.BRKINT | os.darwin.ICRNL | os.darwin.INPCK | os.darwin.ISTRIP | os.darwin.IXON);
+        // input:   no break, no CR to NL, no parity check, no strip char, no start/stop output ctrl.
+        // output:  disable post processing
+        // control: set 8 bit chars
+        // local:   choign off, canonical off, no extended functions, no signal chars (^Z, ^C)
+        termios.iflag &= ~(os.darwin.BRKINT | os.darwin.ICRNL | os.darwin.ISTRIP | os.darwin.IXON);
         termios.oflag &= ~(os.darwin.OPOST);
         termios.cflag |= os.darwin.CS8;
         termios.lflag &= ~(os.darwin.ECHO | os.darwin.ICANON | os.darwin.IEXTEN | os.darwin.ISIG);
-        _ = os.darwin.tcsetattr(out.handle, .FLUSH, &termios);
+        _ = os.darwin.tcsetattr(os.STDIN_FILENO, .FLUSH, &termios);
 
         return .{
             .orig_termios = orig_termios,
             .raw_mode = false,
             .allocator = allocator,
-            .in = io.getStdIn(),
-            .out = out,
-            .ansi_escape_codes = out.supportsAnsiEscapeCodes(),
+            .ansi_escape_codes = io.getStdOut().supportsAnsiEscapeCodes(),
         };
     }
 
     pub fn deinit(self: *Self) !void {
-        _ = try os.write(self.out.handle, CURSOR_SHOW); // restore cursor
-        _ = os.darwin.tcsetattr(self.in.handle, .FLUSH, &self.orig_termios); // restore terminal
+        _ = os.darwin.tcsetattr(os.STDIN_FILENO, .FLUSH, &self.orig_termios); // restore terminal
+        _ = try os.write(os.STDOUT_FILENO, CURSOR_SHOW); // restore cursor
     }
 
     pub fn render(self: *Self, buffer: Buffer) !void {
@@ -89,6 +84,6 @@ pub const Terminal = struct {
         try list.appendSlice(try fmt.bufPrint(&buf, "\x1b[{d};{d}H", .{ buffer.cursor_y, buffer.cursor_x }));
         try list.appendSlice("\x1b[?25h");
 
-        _ = try os.write(self.out.handle, list.items);
+        _ = try os.write(os.STDOUT_FILENO, list.items);
     }
 };

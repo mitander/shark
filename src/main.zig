@@ -3,7 +3,7 @@ const os = std.os;
 const mem = std.mem;
 const debug = std.log.debug;
 
-const Terminal = @import("terminal.zig").Terminal;
+const Termios = @import("termios.zig").Termios;
 const Buffer = @import("buffer.zig").Buffer;
 
 pub const Direction = enum(u8) { Up, Down, Left, Right };
@@ -11,19 +11,19 @@ pub const Direction = enum(u8) { Up, Down, Left, Right };
 const Editor = struct {
     const Self = @This();
     allocator: mem.Allocator,
-    terminal: Terminal,
+    termios: Termios,
     buffer: Buffer,
 
     fn init(allocator: mem.Allocator) !Self {
         return .{
             .allocator = allocator,
             .buffer = Buffer.init(allocator),
-            .terminal = try Terminal.init(allocator),
+            .termios = try Termios.init(allocator),
         };
     }
 
     fn deinit(self: *Self) !void {
-        try self.terminal.deinit();
+        try self.termios.deinit();
         self.buffer.deinit();
     }
 
@@ -40,7 +40,7 @@ const Editor = struct {
 
     fn refresh(self: *Self) !void {
         try self.buffer.updateWindowSize();
-        try self.terminal.render(self.buffer);
+        try self.termios.render(self.buffer);
     }
 };
 
@@ -66,7 +66,7 @@ pub fn main() !void {
         try editor.refresh();
         switch (try editor.readKey()) {
             'q' => {
-                os.exit(0);
+                break;
             },
             'j' => editor.buffer.moveCursor(Direction.Down),
             'k' => editor.buffer.moveCursor(Direction.Up),
