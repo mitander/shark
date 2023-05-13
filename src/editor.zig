@@ -45,54 +45,64 @@ pub const Editor = struct {
     }
 
     pub fn moveCursor(self: *Self, dir: Direction) void {
+        var cursor_x = self.buffer.cursor_x;
+        var cursor_y = self.buffer.cursor_y;
+        var cursor_col = self.buffer.cursor_col;
+        var offset = self.buffer.offset;
+        var rows = self.buffer.rows.items;
+        var win_rows = self.buffer.ws_row;
+
+        var row_len = if (rows.len == 0) 0 else rows.len - 1;
+        var col_len = if (rows[cursor_y].render.len == 0) 0 else rows[cursor_y].render.len - 1;
+
+        assert(cursor_y <= row_len);
+
         switch (dir) {
             .Left => {
-                if (self.buffer.cursor_x > 0) {
-                    self.buffer.cursor_x -= 1;
-                }
+                if (cursor_x > 0) cursor_x -= 1;
             },
             .Right => {
-                if (self.buffer.cursor_y >= self.buffer.rows.items.len) return;
-                if (self.buffer.cursor_x < self.buffer.rows.items[self.buffer.cursor_y].render.len) {
-                    self.buffer.cursor_x += 1;
-                }
+                if (col_len > cursor_x) cursor_x += 1;
             },
             .Up => {
-                if (self.buffer.cursor_y > 0) {
-                    self.buffer.cursor_y -= 1;
-                } else if (self.buffer.offset > 0) {
-                    self.buffer.offset -= 1;
-                } else {
-                    return;
-                }
+                if (cursor_y == 0 and offset == 0) return;
+                if (cursor_y > 0) cursor_y -= 1 else offset -= 1;
 
-                var index = self.buffer.offset + self.buffer.cursor_y;
-                if (index >= self.buffer.rows.items.len) return;
+                assert(row_len >= cursor_y);
+                var prev_col_len = if (rows[cursor_y].render.len == 0) 0 else rows[cursor_y].render.len - 1;
 
-                if (self.buffer.cursor_x == 0) self.buffer.cursor_x = @intCast(u16, self.buffer.rows.items[index].render.len);
-                if (self.buffer.rows.items[index].render.len < self.buffer.cursor_x) {
-                    self.buffer.cursor_x = @intCast(u16, self.buffer.rows.items[index].render.len);
+                if (cursor_x > prev_col_len) {
+                    if (cursor_col == 0) cursor_col = cursor_x;
+                    cursor_x = @intCast(u16, prev_col_len);
+                } else if (prev_col_len > cursor_col and cursor_col > 0) {
+                    cursor_x = @intCast(u16, cursor_col);
+                    cursor_col = 0;
+                } else if (prev_col_len > cursor_x and cursor_col > 0) {
+                    cursor_x = @intCast(u16, prev_col_len);
                 }
             },
             .Down => {
-                if (self.buffer.offset + self.buffer.cursor_y >= self.buffer.rows.items.len) return;
+                if (cursor_y + offset == row_len and offset + cursor_y == row_len) return;
+                if (cursor_y < win_rows) cursor_y += 1 else offset += 1;
 
-                if (self.buffer.cursor_y < self.buffer.ws_row) {
-                    self.buffer.cursor_y += 1;
-                } else if (self.buffer.offset < self.buffer.rows.items.len - self.buffer.ws_row) {
-                    self.buffer.offset += 1;
-                } else {
-                    return;
-                }
+                assert(row_len >= cursor_y);
+                var next_col_len = if (rows[cursor_y].render.len == 0) 0 else rows[cursor_y].render.len - 1;
 
-                var index = self.buffer.offset + self.buffer.cursor_y;
-                if (index >= self.buffer.rows.items.len) return;
-
-                if (self.buffer.cursor_x == 0) self.buffer.cursor_x = @intCast(u16, self.buffer.rows.items[index].render.len);
-                if (self.buffer.rows.items[index].render.len < self.buffer.cursor_x) {
-                    self.buffer.cursor_x = @intCast(u16, self.buffer.rows.items[index].render.len);
+                if (cursor_x > next_col_len) {
+                    if (cursor_col == 0) cursor_col = cursor_x;
+                    cursor_x = @intCast(u16, next_col_len);
+                } else if (next_col_len > cursor_col and cursor_col > 0) {
+                    cursor_x = @intCast(u16, cursor_col);
+                    cursor_col = 0;
+                } else if (next_col_len > cursor_x and cursor_col > 0) {
+                    cursor_x = @intCast(u16, next_col_len);
                 }
             },
         }
+
+        self.buffer.cursor_x = cursor_x;
+        self.buffer.cursor_y = cursor_y;
+        self.buffer.cursor_col = cursor_col;
+        self.buffer.offset = offset;
     }
 };

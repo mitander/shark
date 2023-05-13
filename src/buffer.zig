@@ -27,6 +27,7 @@ pub const Buffer = struct {
     ws_col: u16,
     cursor_y: u16,
     cursor_x: u16,
+    cursor_col: u16,
     file_path: []const u8,
 
     pub fn init(allocator: mem.Allocator) Self {
@@ -38,6 +39,7 @@ pub const Buffer = struct {
             .ws_row = 0,
             .cursor_y = 0,
             .cursor_x = 0,
+            .cursor_col = 0,
             .file_path = undefined,
         };
     }
