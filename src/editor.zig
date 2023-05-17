@@ -40,8 +40,7 @@ pub const Editor = struct {
     }
 
     pub fn refresh(self: *Self) !void {
-        try self.buffer.updateWindowSize();
-        try self.termios.render(self.buffer);
+        try self.termios.render(&self.buffer);
     }
 
     pub fn moveCursor(self: *Self, dir: Direction) void {

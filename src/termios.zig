@@ -63,7 +63,7 @@ pub const Termios = struct {
         _ = try os.write(os.STDOUT_FILENO, CURSOR_SHOW); // restore cursor
     }
 
-    pub fn render(self: *Self, buffer: Buffer) !void {
+    pub fn render(self: *Self, buffer: *Buffer) !void {
         var list = ArrayList(u8).init(self.allocator);
         defer list.deinit();
 
@@ -71,6 +71,7 @@ pub const Termios = struct {
         try list.appendSlice(CURSOR_HIDE);
         try list.appendSlice("\x1b[H");
 
+        try buffer.updateWindowSize();
         var end: usize = if (buffer.offset + buffer.ws_row > buffer.rows.items.len) buffer.rows.items.len else buffer.offset + buffer.ws_row;
         assert(buffer.rows.items.len > 0);
         assert(end <= buffer.rows.items.len);
