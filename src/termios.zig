@@ -27,9 +27,7 @@ const CURSOR_SHOW = CSI ++ "?25h";
 pub const Termios = struct {
     const Self = @This();
     orig_termios: os.termios = undefined,
-    raw_mode: bool = false,
     allocator: mem.Allocator,
-    ansi_escape_codes: bool,
 
     pub fn init(allocator: mem.Allocator) !Self {
         const VMIN = 5;
@@ -56,9 +54,7 @@ pub const Termios = struct {
 
         return .{
             .orig_termios = orig_termios,
-            .raw_mode = false,
             .allocator = allocator,
-            .ansi_escape_codes = io.getStdOut().supportsAnsiEscapeCodes(),
         };
     }
 
