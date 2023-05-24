@@ -104,6 +104,20 @@ pub const Buffer = struct {
         self.rows.items[self.cursor_y].render = try self.allocator.dupe(u8, buf);
     }
 
+    pub fn delete(self: *Self) !void {
+        var x = self.cursor_x;
+        var y = self.cursor_y;
+        var row = self.rows.items[y];
+        _ = self.allocator.resize(row.render, row.render.len - 1);
+
+        mem.copy(u8, row.render[x..row.render.len], row.render[x + 1 .. row.render.len]);
+        self.rows.items[self.cursor_y].render = try self.allocator.dupe(u8, row.render);
+        self.rows.items[self.cursor_y].render.len -= 1;
+        if (x == row.render.len - 1) {
+            self.cursor_x -= 1;
+        }
+    }
+
     pub fn updateWindowSize(self: *Self) !void {
         var winsize: os.darwin.winsize = undefined;
         const err = os.darwin.ioctl(os.STDOUT_FILENO, os.darwin.T.IOCGWINSZ, @ptrToInt(&winsize));

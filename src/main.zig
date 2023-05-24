@@ -36,12 +36,18 @@ pub fn main() !void {
             'l' => editor.moveCursor(Direction.Right),
             'i' => while (true) {
                 var key: u8 = try editor.readKey();
-                if (key == 'q') {
-                    break;
+                switch (key) {
+                    'q' => break,
+                    127 => {
+                        try editor.buffer.delete();
+                    },
+                    else => {
+                        try editor.buffer.insert(key);
+                    },
                 }
-                try editor.buffer.insert(key);
                 try editor.refresh();
             },
+            'x' => try editor.buffer.delete(),
             else => continue,
         }
     }
