@@ -77,7 +77,7 @@ pub const Termios = struct {
         assert(end <= buffer.rows.items.len);
 
         for (buffer.rows.items[buffer.offset..end]) |item| {
-            try list.appendSlice(item.render);
+            try list.appendSlice(item);
             try list.appendSlice("\r\n");
         }
 

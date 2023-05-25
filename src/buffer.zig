@@ -13,15 +13,10 @@ pub const Cursor = struct {
     y: u8,
 };
 
-const Row = struct {
-    src: []u8,
-    render: []u8,
-};
-
 pub const Buffer = struct {
     const Self = @This();
     allocator: mem.Allocator,
-    rows: ArrayList(Row),
+    rows: ArrayList([]u8),
     offset: u16,
     ws_row: u16,
     ws_col: u16,
@@ -33,7 +28,7 @@ pub const Buffer = struct {
     pub fn init(allocator: mem.Allocator) Self {
         return .{
             .allocator = allocator,
-            .rows = ArrayList(Row).init(allocator),
+            .rows = ArrayList([]u8).init(allocator),
             .offset = 0,
             .ws_col = 0,
             .ws_row = 0,
@@ -46,17 +41,14 @@ pub const Buffer = struct {
 
     pub fn deinit(self: *Self) void {
         for (self.rows.items) |item| {
-            self.allocator.free(item.src);
-            self.allocator.free(item.render);
+            self.allocator.free(item);
         }
         self.rows.deinit();
     }
 
     pub fn insertRow(self: *Self, index: usize, item: []const u8) !void {
-        try self.rows.insert(index, .{
-            .src = try self.allocator.dupe(u8, item),
-            .render = try self.allocator.dupe(u8, item),
-        });
+        if (index < 0 or index > self.rows.items.len) return;
+        try self.rows.insert(index, try self.allocator.dupe(u8, item));
     }
 
     pub fn openFile(self: *Self, file_path: []const u8) !void {
@@ -76,8 +68,8 @@ pub const Buffer = struct {
 
     pub fn insert(self: *Self, char: u8) !void {
         var row = self.rows.items[self.cursor_y];
-        var copy = try self.allocator.dupe(u8, row.render);
-        var buf = try self.allocator.realloc(row.render, row.render.len + 1);
+        var copy = try self.allocator.dupe(u8, row);
+        var buf = try self.allocator.realloc(row, row.len + 1);
         defer self.allocator.free(buf);
         defer self.allocator.free(copy);
 
@@ -101,21 +93,21 @@ pub const Buffer = struct {
         }
         self.cursor_x += 1;
         assert(self.cursor_y < self.rows.items.len);
-        self.rows.items[self.cursor_y].render = try self.allocator.dupe(u8, buf);
+        self.rows.items[self.cursor_y] = try self.allocator.dupe(u8, buf);
     }
 
     pub fn delete(self: *Self) !void {
-        var x = self.cursor_x;
-        var y = self.cursor_y;
-        var row = self.rows.items[y];
-        _ = self.allocator.resize(row.render, row.render.len - 1);
+        if (self.rows.items[self.cursor_y].len == 0) return;
 
-        mem.copy(u8, row.render[x..row.render.len], row.render[x + 1 .. row.render.len]);
-        self.rows.items[self.cursor_y].render = try self.allocator.dupe(u8, row.render);
-        self.rows.items[self.cursor_y].render.len -= 1;
-        if (x == row.render.len - 1) {
-            self.cursor_x -= 1;
-        }
+        var row = self.rows.items[self.cursor_y];
+        mem.copy(u8, row[self.cursor_x .. row.len - 1], row[self.cursor_x + 1 .. row.len]);
+
+        var buf = try self.allocator.realloc(row, row.len - 1);
+        defer self.allocator.free(buf);
+        self.rows.items[self.cursor_y] = try self.allocator.dupe(u8, buf);
+
+        // move cursor when deleting last column
+        if (self.cursor_x == buf.len and buf.len > 0) self.cursor_x -= 1;
     }
 
     pub fn updateWindowSize(self: *Self) !void {

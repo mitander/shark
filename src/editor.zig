@@ -52,7 +52,7 @@ pub const Editor = struct {
         var win_rows = self.buffer.ws_row;
 
         var row_len = if (rows.len == 0) 0 else rows.len - 1;
-        var col_len = if (rows[cursor_y].render.len == 0) 0 else rows[cursor_y].render.len - 1;
+        var col_len = if (rows[cursor_y].len == 0) 0 else rows[cursor_y].len - 1;
 
         assert(cursor_y <= row_len);
 
@@ -68,7 +68,7 @@ pub const Editor = struct {
                 if (cursor_y > 0) cursor_y -= 1 else offset -= 1;
 
                 assert(row_len >= cursor_y);
-                var prev_col_len = if (rows[cursor_y].render.len == 0) 0 else rows[cursor_y].render.len - 1;
+                var prev_col_len = if (rows[cursor_y].len == 0) 0 else rows[cursor_y].len - 1;
 
                 if (cursor_x > prev_col_len) {
                     if (cursor_col == 0) cursor_col = cursor_x;
@@ -85,7 +85,7 @@ pub const Editor = struct {
                 if (cursor_y < win_rows) cursor_y += 1 else offset += 1;
 
                 assert(row_len >= cursor_y);
-                var next_col_len = if (rows[cursor_y].render.len == 0) 0 else rows[cursor_y].render.len - 1;
+                var next_col_len = if (rows[cursor_y].len == 0) 0 else rows[cursor_y].len - 1;
 
                 if (cursor_x > next_col_len) {
                     if (cursor_col == 0) cursor_col = cursor_x;
