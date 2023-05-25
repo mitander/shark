@@ -43,13 +43,19 @@ pub fn main() !void {
                     'l' => editor.moveCursor(Direction.Right),
                     'x' => try editor.buffer.delete(editor.buffer.cursor_x),
                     'i' => editor.mode = Mode.INSERT,
+                    'a' => {
+                        editor.buffer.cursor_x += 1;
+                        editor.mode = Mode.INSERT;
+                    },
                     else => continue,
                 }
             },
             .INSERT => {
                 var key = try editor.readKey();
                 switch (@intToEnum(Key, key)) {
-                    .ESC => editor.mode = Mode.NORMAL,
+                    .ESC => {
+                        editor.mode = Mode.NORMAL;
+                    },
                     .BACKSPACE => if (editor.buffer.cursor_x > 0) try editor.buffer.delete(editor.buffer.cursor_x - 1),
                     else => try editor.buffer.insert(key),
                 }
