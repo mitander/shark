@@ -92,22 +92,26 @@ pub const Buffer = struct {
             }
         }
         self.cursor_x += 1;
+        self.cursor_col = self.cursor_x;
+
         assert(self.cursor_y < self.rows.items.len);
         self.rows.items[self.cursor_y] = try self.allocator.dupe(u8, buf);
     }
 
-    pub fn delete(self: *Self) !void {
+    pub fn delete(self: *Self, col: u16) !void {
         if (self.rows.items[self.cursor_y].len == 0) return;
 
         var row = self.rows.items[self.cursor_y];
-        mem.copy(u8, row[self.cursor_x .. row.len - 1], row[self.cursor_x + 1 .. row.len]);
+        mem.copy(u8, row[col .. row.len - 1], row[col + 1 .. row.len]);
 
         var buf = try self.allocator.realloc(row, row.len - 1);
         defer self.allocator.free(buf);
         self.rows.items[self.cursor_y] = try self.allocator.dupe(u8, buf);
 
-        // move cursor when deleting last column
-        if (self.cursor_x == buf.len and buf.len > 0) self.cursor_x -= 1;
+        if ((col == buf.len or col < self.cursor_x) and buf.len > 0) {
+            self.cursor_x -= 1;
+            self.cursor_col = self.cursor_x;
+        }
     }
 
     pub fn updateWindowSize(self: *Self) !void {

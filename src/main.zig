@@ -3,8 +3,15 @@ const os = std.os;
 const mem = std.mem;
 const debug = std.log.debug;
 
+const Mode = @import("editor.zig").Mode;
 const Editor = @import("editor.zig").Editor;
 const Direction = @import("editor.zig").Direction;
+
+const Key = enum(u8) {
+    ESC = 27,
+    BACKSPACE = 127,
+    _,
+};
 
 pub fn main() !void {
     var args = std.process.args();
@@ -26,29 +33,27 @@ pub fn main() !void {
 
     while (true) {
         try editor.refresh();
-        switch (try editor.readKey()) {
-            'q' => {
-                break;
-            },
-            'j' => editor.moveCursor(Direction.Down),
-            'k' => editor.moveCursor(Direction.Up),
-            'h' => editor.moveCursor(Direction.Left),
-            'l' => editor.moveCursor(Direction.Right),
-            'i' => while (true) {
-                var key: u8 = try editor.readKey();
-                switch (key) {
-                    'q' => break,
-                    127 => {
-                        try editor.buffer.delete();
-                    },
-                    else => {
-                        try editor.buffer.insert(key);
-                    },
+        switch (editor.mode) {
+            .NORMAL => {
+                switch (try editor.readKey()) {
+                    'q' => break, // quit
+                    'j' => editor.moveCursor(Direction.Down),
+                    'k' => editor.moveCursor(Direction.Up),
+                    'h' => editor.moveCursor(Direction.Left),
+                    'l' => editor.moveCursor(Direction.Right),
+                    'x' => try editor.buffer.delete(editor.buffer.cursor_x),
+                    'i' => editor.mode = Mode.INSERT,
+                    else => continue,
                 }
-                try editor.refresh();
             },
-            'x' => try editor.buffer.delete(),
-            else => continue,
+            .INSERT => {
+                var key = try editor.readKey();
+                switch (@intToEnum(Key, key)) {
+                    .ESC => editor.mode = Mode.NORMAL,
+                    .BACKSPACE => if (editor.buffer.cursor_x > 0) try editor.buffer.delete(editor.buffer.cursor_x - 1),
+                    else => try editor.buffer.insert(key),
+                }
+            },
         }
     }
 }

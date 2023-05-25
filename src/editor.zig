@@ -9,17 +9,21 @@ const Buffer = @import("buffer.zig").Buffer;
 
 pub const Direction = enum(u8) { Up, Down, Left, Right };
 
+pub const Mode = enum(u8) { NORMAL, INSERT };
+
 pub const Editor = struct {
     const Self = @This();
     allocator: mem.Allocator,
     termios: Termios,
     buffer: Buffer,
+    mode: Mode,
 
     pub fn init(allocator: mem.Allocator) !Self {
         return .{
             .allocator = allocator,
             .buffer = Buffer.init(allocator),
             .termios = try Termios.init(allocator),
+            .mode = Mode.NORMAL,
         };
     }
 
