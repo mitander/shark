@@ -46,12 +46,12 @@ pub const Buffer = struct {
         self.rows.deinit();
     }
 
-    pub fn insertRow(self: *Self, index: usize, item: []const u8) !void {
+    pub fn insert_row(self: *Self, index: usize, item: []const u8) !void {
         if (index < 0 or index > self.rows.items.len) return;
         try self.rows.insert(index, try self.allocator.dupe(u8, item));
     }
 
-    pub fn openFile(self: *Self, file_path: []const u8) !void {
+    pub fn open_file(self: *Self, file_path: []const u8) !void {
         const file = try fs.cwd().createFile(file_path, .{ .read = true, .truncate = false });
         defer file.close();
 
@@ -61,7 +61,7 @@ pub const Buffer = struct {
         var it = mem.split(u8, file_bytes, "\n");
         var index: usize = 0;
         while (it.next()) |line| {
-            try self.insertRow(index, line);
+            try self.insert_row(index, line);
             index += 1;
         }
     }
@@ -114,7 +114,7 @@ pub const Buffer = struct {
         }
     }
 
-    pub fn updateWindowSize(self: *Self) !void {
+    pub fn update_winsize(self: *Self) !void {
         var winsize: os.darwin.winsize = undefined;
         const err = os.darwin.ioctl(os.STDOUT_FILENO, os.darwin.T.IOCGWINSZ, @intFromPtr(&winsize));
         if (os.errno(err) != .SUCCESS) {

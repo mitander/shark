@@ -29,18 +29,18 @@ pub fn main() !void {
     var editor = try Editor.init(allocator);
     defer editor.deinit() catch unreachable;
 
-    try editor.openFile(file_path);
+    try editor.open_file(file_path);
 
     while (true) {
         try editor.refresh();
         switch (editor.mode) {
             .NORMAL => {
-                switch (try editor.readKey()) {
+                switch (try editor.read_key()) {
                     'q' => break, // quit
-                    'j' => editor.moveCursor(Direction.Down),
-                    'k' => editor.moveCursor(Direction.Up),
-                    'h' => editor.moveCursor(Direction.Left),
-                    'l' => editor.moveCursor(Direction.Right),
+                    'j' => editor.move_cursor(Direction.Down),
+                    'k' => editor.move_cursor(Direction.Up),
+                    'h' => editor.move_cursor(Direction.Left),
+                    'l' => editor.move_cursor(Direction.Right),
                     'x' => try editor.buffer.delete(editor.buffer.cursor_x),
                     'i' => editor.mode = Mode.INSERT,
                     'a' => {
@@ -51,6 +51,7 @@ pub fn main() !void {
                 }
             },
             .INSERT => {
+                var key = try editor.read_key();
                 var enum_key: Key = @enumFromInt(key);
                 switch (enum_key) {
                     .ESC => {

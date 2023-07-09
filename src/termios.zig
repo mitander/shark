@@ -71,7 +71,7 @@ pub const Termios = struct {
         try list.appendSlice(CURSOR_HIDE);
         try list.appendSlice("\x1b[H");
 
-        try buffer.updateWindowSize();
+        try buffer.update_winsize();
         var end: usize = if (buffer.offset + buffer.ws_row > buffer.rows.items.len) buffer.rows.items.len else buffer.offset + buffer.ws_row;
         assert(buffer.rows.items.len > 0);
         assert(end <= buffer.rows.items.len);

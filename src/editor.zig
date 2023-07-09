@@ -32,11 +32,11 @@ pub const Editor = struct {
         self.buffer.deinit();
     }
 
-    pub fn openFile(self: *Self, file_path: []const u8) !void {
-        try self.buffer.openFile(file_path);
+    pub fn open_file(self: *Self, file_path: []const u8) !void {
+        try self.buffer.open_file(file_path);
     }
 
-    pub fn readKey(self: *Self) !u8 {
+    pub fn read_key(self: *Self) !u8 {
         var seq = try self.allocator.alloc(u8, 1);
         defer self.allocator.free(seq);
         _ = try os.read(os.darwin.STDIN_FILENO, seq);
@@ -47,7 +47,7 @@ pub const Editor = struct {
         try self.termios.render(&self.buffer);
     }
 
-    pub fn moveCursor(self: *Self, dir: Direction) void {
+    pub fn move_cursor(self: *Self, dir: Direction) void {
         var cursor_x = self.buffer.cursor_x;
         var cursor_y = self.buffer.cursor_y;
         var cursor_col = self.buffer.cursor_col;
