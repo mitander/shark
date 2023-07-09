@@ -76,7 +76,7 @@ pub const Buffer = struct {
         assert(buf.len > 0);
         if (self.cursor_x > buf.len) {
             assert(self.cursor_x + 1 <= buf.len);
-            mem.set(u8, buf[self.cursor_x .. self.cursor_x + 1], char);
+            @memset(buf[self.cursor_x .. self.cursor_x + 1], char);
         } else {
             var j: usize = 0;
             for (0..buf.len) |i| {
@@ -116,7 +116,7 @@ pub const Buffer = struct {
 
     pub fn updateWindowSize(self: *Self) !void {
         var winsize: os.darwin.winsize = undefined;
-        const err = os.darwin.ioctl(os.STDOUT_FILENO, os.darwin.T.IOCGWINSZ, @ptrToInt(&winsize));
+        const err = os.darwin.ioctl(os.STDOUT_FILENO, os.darwin.T.IOCGWINSZ, @intFromPtr(&winsize));
         if (os.errno(err) != .SUCCESS) {
             return error.IoctlError;
         }

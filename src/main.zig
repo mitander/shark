@@ -51,8 +51,8 @@ pub fn main() !void {
                 }
             },
             .INSERT => {
-                var key = try editor.readKey();
-                switch (@intToEnum(Key, key)) {
+                var enum_key: Key = @enumFromInt(key);
+                switch (enum_key) {
                     .ESC => {
                         editor.mode = Mode.NORMAL;
                     },

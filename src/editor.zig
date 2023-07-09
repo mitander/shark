@@ -76,12 +76,12 @@ pub const Editor = struct {
 
                 if (cursor_x > prev_col_len) {
                     if (cursor_col == 0) cursor_col = cursor_x;
-                    cursor_x = @intCast(u16, prev_col_len);
+                    cursor_x = @intCast(prev_col_len);
                 } else if (prev_col_len > cursor_col and cursor_col > 0) {
-                    cursor_x = @intCast(u16, cursor_col);
+                    cursor_x = @intCast(cursor_col);
                     cursor_col = 0;
                 } else if (prev_col_len > cursor_x and cursor_col > 0) {
-                    cursor_x = @intCast(u16, prev_col_len);
+                    cursor_x = @intCast(prev_col_len);
                 }
             },
             .Down => {
@@ -93,12 +93,12 @@ pub const Editor = struct {
 
                 if (cursor_x > next_col_len) {
                     if (cursor_col == 0) cursor_col = cursor_x;
-                    cursor_x = @intCast(u16, next_col_len);
+                    cursor_x = @intCast(next_col_len);
                 } else if (next_col_len > cursor_col and cursor_col > 0) {
-                    cursor_x = @intCast(u16, cursor_col);
+                    cursor_x = @intCast(cursor_col);
                     cursor_col = 0;
                 } else if (next_col_len > cursor_x and cursor_col > 0) {
-                    cursor_x = @intCast(u16, next_col_len);
+                    cursor_x = @intCast(next_col_len);
                 }
             },
         }
